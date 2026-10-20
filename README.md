@@ -70,11 +70,13 @@ python extract_palette.py --selftest
 - 不内置图像 diff 打分，也不承诺像素级一致
 - 渐变填充柱/条/面积都验证过（LabTalk `-pfm 3` + `-pfb`/`-pff`；面积先 `-pf 1` 开填充）；**fill-to-next（`-pfv 9`）的曲线要先把填充改成填充到基线（`-pfv 0`），否则 `-pfm` 被忽略、导出仍是纯色**；渐变按绘图区高度统一插值，做不到「每个峰各自从峰顶饱和渐变到底」这种逐形状渐变，峰越矮越淡
 - 渐变设色与导出必须分开调用（同一批会毒化 COM 会话），失败就重启 Origin 再来
+- 面积填充的下边界锁定在设色时的轴下限：先定轴范围再设填充，改轴不会让填充跟随
+- `origin_annotate` 的 y 是文字顶边、`origin_layout_info` 报的是底边，两者差一个字高；`style.size` 常被忽略，要 LabTalk `TextN.fsize` 强制
 - 没装 Origin / dsh-origin 插件的机器上不适用
 
 ## 版本
 
-变更记录写在 `SKILL.md` 顶部（当前 v1.3：fill-to-next 不吃 -pfm 与列短名两个坑；v1.2 面积渐变已验证；v1.1 填充形态进卡；v1.0 初版）。
+变更记录写在 `SKILL.md` 顶部（当前 v1.5：注释 y 口径 / 面积填充底锁定轴下限 / 底部装饰条留白缝；v1.4 装饰条贴基线；v1.3 fill-to-next 不吃 -pfm 与列短名；v1.2 面积渐变已验证；v1.1 填充形态进卡；v1.0 初版）。
 
 ## 许可
 
