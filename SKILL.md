@@ -6,7 +6,7 @@ whenToUse: 用户提供一张参考图（或描述某张成品图）要求把自
 
 # 参考图复刻 SOP
 
-> v1.0：规格卡 → 工具映射 → 差量收敛 → verify；含上游委派接口（被 dsh-xps-peakfit 等领域 SOP 调用时的交接与分流护栏）与 `extract_palette.py` 取色。
+> v1.1：填充形态（纯色 / 渐变）进规格卡与映射——柱/条渐变走 `set %C -pfm 3 -pfb -pff`（Origin 2026b 实测），并记下渐变设色与导出必须分开调用的坑。v1.0：规格卡 → 工具映射 → 差量收敛 → verify；含上游委派接口（被 dsh-xps-peakfit 等领域 SOP 调用时的交接与分流护栏）与 `extract_palette.py` 取色。
 
 目的：把"看着像"变成"逐字段对得上"。入口是一张**规格卡**，出口是一张**差量表为空**的图。
 
@@ -41,6 +41,7 @@ whenToUse: 用户提供一张参考图（或描述某张成品图）要求把自
 | x, y | 轴标题（物理量+单位）、范围、刻度类型（线性 / log10 / ln）、是否反向 | 目测 |
 | y2 | 有无次轴、次轴标题与范围 | 目测 |
 | series | 逐条：颜色 #hex、线宽 pt、线型、符号、透明度 | extract_palette.py + 目测 |
+| fill | 填充形态：none / 纯色 / **渐变（起止两色 #hex + 方向 + 是否每根柱子独立）** / 图案；作用对象：柱·条·面积 | 目测放大看是否渐变 + extract_palette.py |
 | yerr | 误差棒有无与样式 | 目测 |
 | legend | 位置（tr/tl/br/bl）、字号、有无边框 | 目测 |
 | refs | 参考线 / 阈值线 / 峰位标注 | 目测 |
@@ -64,6 +65,9 @@ python extract_palette.py 参考图.png [--top 8]
 | 配色+线宽+轴标题一次到位 | `origin_plot(..., style_overrides={"series_colors":["#hex"...],"line_width_pt":2.0,"x_title":"..","y_title":".."})` |
 | 轴范围/刻度类型/网格/字号 | `origin_edit_axis(graph, axis="y", from_value=, to_value=, scale={2:log10,3:ln}, props={...})` |
 | 单条曲线精修 | `origin_edit_plot(graph, [{"plot":i,"color":"#..","line_width_pt":2.5,"line_style":1,"symbol_kind":2,"transparency":20}])` |
+| 柱/条 **纯色填充** | `origin_labtalk(graph, "set Book1_A -pfb color(221,94,0);")`（要边框色：`-pbc color(...)`） |
+| 柱/条 **渐变填充** | `origin_labtalk(graph, "set Book1_A -pfm 3; set Book1_A -pfb color(221,94,0); set Book1_A -pff color(0,114,178);")`——顶=起始色、底=终止色；反向就把两色对调；`-pfbr 221 94 0` / `-pffr 0 114 178` 是同效写法。**mode 只试 0/1/2/3**：0/1 关闭、2 单色渐变（实际偏黑）、3 双色线性；试 4/5 等无效值会把 Origin 会话弄坏 |
+| 渐变读回 | 读回不可靠（`Book1_A.pfm` 读回 NaN）：只能用 `origin_view_graph` 目视，或导出后取色核对（`extract_palette.py`） |
 | 图例位置/字号/边框 | `origin_edit_legend(graph, {"position":"tr","font_size_pt":11,"frame":false})` |
 | 页面尺寸 / 图层几何 | `origin_edit_page(graph, page_size_cm={"width":8.9,"height":6.5})` / `layer_geometry_pct` |
 | 参考线 / 峰标注 | `origin_add_line(graph, ...)` / `origin_annotate(graph, items=[...])`（先 `origin_layout_info` 算坐标，别渲染-看图试错） |
@@ -83,9 +87,11 @@ python extract_palette.py 参考图.png [--top 8]
 
 ## 交付前自检（8 条有一条 no 就别交付）
 1. 没有一项数据来自参考图像素？ 2. 系列数 = 卡上系列数？ 3. 每条系列颜色 = 卡上 hex（不是"差不多"）？
-4. 轴标题含单位、范围一致？ 5. 次轴 / 反向轴按要求？ 6. 图例位置字号对齐？ 7. 页面尺寸 = 卡 canvas？ 8. verify 无 fail？
+4. 轴标题含单位、范围一致？ 5. 次轴 / 反向轴按要求？ 6. 图例位置字号对齐？ 7. 页面尺寸 = 卡 canvas？ 8. verify 无 fail？ 9. 填充形态 = 卡上（纯色 / 渐变、方向、起止色都对，**不能拿纯色顶渐变**）？
 
 ## 备注
 - 参数、错误码、失败恢复动作全在 **origin-plotting** skill；本 skill 只管"参考图 → 参数"这一段。
 - 参考图小字/细线读不准：读卡阶段问一次，别猜。
+- **渐变设色与导出必须分开调用**：同一批「设渐变 → 导出」在 Origin 2026b 上实测会毒化 COM 会话（之后 `origin_export` 三通道全失败、`origin_plot` 报 `Datasheet_FindCol` 异常、`origin_diagnose` 报 `ApplicationBase_Path` 线程错误）。先设色→单独导出→失败就重启 Origin，别在同一会话反复重试。
+- 折线/面积填充只有单色（`set %C -pf 1` + `-pfb`）；渐变目前只确认柱/条，面积渐变先试 `-pfm 3`，不行就如实说。
 - `extract_palette.py` 只在需要精确取色时跑；只按需调。
