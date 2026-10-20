@@ -6,7 +6,7 @@ whenToUse: 用户提供一张参考图（或描述某张成品图）要求把自
 
 # 参考图复刻 SOP
 
-> v1.2：面积/折线填充也验证了同一条渐变通道（`-pf 1` + `-pfm 3` + `-pfb`/`-pff`，顶起始色→底终止色；`v11area` 实测 270 个纵向色阶）。v1.1：填充形态（纯色 / 渐变）进规格卡与映射——柱/条渐变走 `set %C -pfm 3 -pfb -pff`（Origin 2026b 实测），并记下渐变设色与导出必须分开调用的坑。v1.0：规格卡 → 工具映射 → 差量收敛 → verify；含上游委派接口（被 dsh-xps-peakfit 等领域 SOP 调用时的交接与分流护栏）与 `extract_palette.py` 取色。
+> v1.3：补两条实测坑——渐变只对「填充到基线」生效（`-pfv 9` fill-to-next 会**忽略** `-pfm` 保持纯色，须先 `-pfv 0`）；LabTalk 里的数据集名是列短名（`Book3_H`），写列名（`Comp1`）不认且静默无效，动手前用 `origin_inspect_graph` 读真实 dataset。v1.2：面积/折线填充也验证了同一条渐变通道（`-pf 1` + `-pfm 3` + `-pfb`/`-pff`，顶起始色→底终止色；`v11area` 实测 270 个纵向色阶）。v1.1：填充形态（纯色 / 渐变）进规格卡与映射——柱/条渐变走 `set %C -pfm 3 -pfb -pff`（Origin 2026b 实测），并记下渐变设色与导出必须分开调用的坑。v1.0：规格卡 → 工具映射 → 差量收敛 → verify；含上游委派接口（被 dsh-xps-peakfit 等领域 SOP 调用时的交接与分流护栏）与 `extract_palette.py` 取色。
 
 目的：把"看着像"变成"逐字段对得上"。入口是一张**规格卡**，出口是一张**差量表为空**的图。
 
@@ -66,7 +66,7 @@ python extract_palette.py 参考图.png [--top 8]
 | 轴范围/刻度类型/网格/字号 | `origin_edit_axis(graph, axis="y", from_value=, to_value=, scale={2:log10,3:ln}, props={...})` |
 | 单条曲线精修 | `origin_edit_plot(graph, [{"plot":i,"color":"#..","line_width_pt":2.5,"line_style":1,"symbol_kind":2,"transparency":20}])` |
 | 柱/条 **纯色填充** | `origin_labtalk(graph, "set Book1_A -pfb color(221,94,0);")`（要边框色：`-pbc color(...)`） |
-| 柱/条/面积 **渐变填充** | `origin_labtalk(graph, "set Book1_A -pfm 3; set Book1_A -pfb color(221,94,0); set Book1_A -pff color(0,114,178);")`（面积/折线先 `-pf 1` 开填充）——顶=起始色、底=终止色；反向就把两色对调；`-pfbr 221 94 0` / `-pffr 0 114 178` 是同效写法。**mode 只试 0/1/2/3**：0/1 关闭、2 单色渐变（实际偏黑）、3 双色线性；试 4/5 等无效值会把 Origin 会话弄坏 |
+| 柱/条/面积 **渐变填充** | `origin_labtalk(graph, "set Book1_A -pfm 3; set Book1_A -pfb color(221,94,0); set Book1_A -pff color(0,114,178);")`（面积/折线先 `-pfv 0; -pf 1` 开填充——**fill-to-next（`-pfv 9`）下 `-pfm` 会被忽略、导出仍是纯色**）——顶=起始色、底=终止色；反向就把两色对调；`-pfbr 221 94 0` / `-pffr 0 114 178` 是同效写法。**mode 只试 0/1/2/3**：0/1 关闭、2 单色渐变（实际偏黑）、3 双色线性；试 4/5 等无效值会把 Origin 会话弄坏 |
 | 渐变读回 | 读回不可靠（`Book1_A.pfm` 读回 NaN）：只能用 `origin_view_graph` 目视，或导出后取色核对（`extract_palette.py`） |
 | 图例位置/字号/边框 | `origin_edit_legend(graph, {"position":"tr","font_size_pt":11,"frame":false})` |
 | 页面尺寸 / 图层几何 | `origin_edit_page(graph, page_size_cm={"width":8.9,"height":6.5})` / `layer_geometry_pct` |
@@ -92,6 +92,8 @@ python extract_palette.py 参考图.png [--top 8]
 ## 备注
 - 参数、错误码、失败恢复动作全在 **origin-plotting** skill；本 skill 只管"参考图 → 参数"这一段。
 - 参考图小字/细线读不准：读卡阶段问一次，别猜。
+- **LabTalk 数据集名是列短名**（`Book3_H`），不是数据列名（`Comp1`）：名字错了 `-pfm/-pfb/-pff` **静默无效**、导出字节和上次一模一样。先 `origin_inspect_graph` 看 plot 的实际 dataset 名再设。
+- **渐变是否真生效只能靠像素验，不能靠肉眼**：导出后在峰值中心取一条竖列，`uniq` 色数 < 20 就是没渐变（纯色最多 1~3 色）。
 - **渐变设色与导出必须分开调用**：同一批「设渐变 → 导出」在 Origin 2026b 上实测会毒化 COM 会话（之后 `origin_export` 三通道全失败、`origin_plot` 报 `Datasheet_FindCol` 异常、`origin_diagnose` 报 `ApplicationBase_Path` 线程错误）。先设色→单独导出→失败就重启 Origin，别在同一会话反复重试。
 - 折线/面积填充：先 `set %C -pf 1` 开填充，再同柱/条一样 `-pfm 3` + `-pfb`/`-pff` —— **2026-10-20 实测面积渐变成立**（曲线下填充区顶起始色→底终止色，270 个纵向色阶）。插值方向是整个绘图区高度，不是按每根柱子独立。
 - `extract_palette.py` 只在需要精确取色时跑；只按需调。
