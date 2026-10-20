@@ -7,6 +7,7 @@ whenToUse: 用户提供一张参考图（或描述某张成品图）要求把自
 # 参考图复刻 SOP（通用版）
 
 > v2.0：改成「任意类型图」的方法论——新增第 0 步强制量测（`measure_ref.py`，颜色和几何比例都从像素来，禁止目测）、图元→通道映射表、能力表（能/只能逼近/做不到）。v1.x 的单图经验收敛进硬坑清单。
+> v2.1：加 `figure_metrics.py`（参考图 ↔ 成品图量化并排对照，收敛循环靠它而不是肉眼）；新增硬坑 11/12（COM 异常可 `origin_release` 救回但工程会丢、字号/点径的正确通道）。
 
 目的：把"看着像"变成"逐字段对得上"。入口是量测 + 规格卡，出口是一张差量表为空的图。
 
@@ -48,6 +49,14 @@ python measure_ref.py 参考图.png --box band:330,282,470,300 --box peak:575,19
 3. 量不到的字段在卡里写 `unknown`，动手前一次性问用户，别猜两轮。
 
 精确取色补充：`extract_palette.py`（量化分桶 + 桶内真实平均）看全局色板；`measure_ref.py` 取局部区域 + 量比例。
+
+**增量对照**（收敛循环每轮都跑，替代肉眼打分）：
+
+```
+python figure_metrics.py 参考图.png 成品图.png   # 并排输出可比的归一化量
+```
+
+统一口径 = 各自画幅归一化：`frame` left/top/w/h %、`band` 装饰带高/绘图高、白缝 %、`tick` 刻度长、`TEXT rows` 每行字高（刻度标签 / 轴标题 / 图内标注）、`dot` 点径、`PALETTE` 主色。两条判据：带的 `band/绘图高` 与参考差 <1%、`dot/绘图宽` 与参考差 <0.1%（参考 898 px 宽时 2 px 点 ≈ 0.22%，1800 px 宽等效 4 px）。
 
 ## 第 1 步：规格卡（先写卡再动手，缺项写 unknown）
 
@@ -105,7 +114,7 @@ python measure_ref.py 参考图.png --box band:330,282,470,300 --box peak:575,19
 
 | 做不到（如实说） | 原因 / 替代 |
 |---|---|
-| 按字体名指定字体 | `TextN.font$="Arial"`、`layer.x.label.font$` 都是静默 no-op；改数字索引会把字变成等宽/粗体（实测 0→等宽、1→衬线）。要么接受默认字体，要么让用户在 Origin GUI 里改 |
+| 按字体名指定字体 | `TextN.font$="Arial"`、`layer.x.label.font$="Arial"`、`layer.x.font$` 全是静默 no-op（2026-10-20 复测）；数字索引只会把字变坏（实测 0→等宽、1→粗体无衬线）。**字体族只能由用户在 Origin GUI 里改**，agent 侧只能对齐字号/字重/位置 |
 | 从参考图读数据 | 红线，禁止 |
 | 像素级 1:1 | 不承诺；差量表为空即交付 |
 | 参考图有两份数据而用户只有一份 | 如实说"少一个面板"，不复制数据凑数 |
@@ -138,6 +147,8 @@ python measure_ref.py 参考图.png --box band:330,282,470,300 --box peak:575,19
 8. **渐变/填充是否生效只能像素验**：导出后在峰中心取一条竖列，`uniq` 色数 <20 就是纯色。文字颜色同理用 `box` 取色核对。
 9. **`doc -o` 切工程前先存当前工程**：有未保存修改时切项目，Origin 弹「是否保存」模态框，之后所有 COM 调用 60s 超时（`origin_status` 也超时），只能人工点掉弹窗或重启。正确顺序：`origin_save_project(临时路径)` → `doc -o 目标.opju`。
 10. **别乱动字体属性**：`TextN.font$` / `layer.x.label.font$` 静默 no-op；`TextN.font=<索引>` 会把字变等宽或粗体，且 `layer.x.font` 改不回原样——想保字体就别碰，改坏了重开已存的 opju 恢复。
+11. **COM 报 `<built-in function ApplicationBase_Path> returned a result with an exception set` = 会话中毒**：诱因是 `origin_labtalk` 里跑带 `$()` 的 `type` 命令、或渐变设色与导出挤在同一批调用。救法=先 `origin_release`，下个调用自动重连（`origin_status` 恢复 ok）；**但 release 会丢掉当前工程**（`list_pages` 变空），所以每次改动前先 `origin_save_project`，救回后 `doc -o 该 opju` 重开。release 救不回时再重启 Origin。
+12. **字号/点径只有两条通道，别瞎试**：刻度标签字号=`origin_edit_axis(axis="x", props={label_font_pt:11})`（读回 `x.label.fsize`）；轴标题字号=`layer.x.label.pt`；**`layer.x.pt`/`layer.y.pt` 不是刻度字号（设了静默无效）**；散点= `origin_edit_plot(edits=[{plot:i, symbol_size:..}])`，参照 `symbol_size`≈1.0 @1800 px 宽 ≈ 4~5 px 点径（参考图 0.3% 绘图宽）——1.5 偏粗、0.8 几乎看不见。
 
 ## 备注
 - 参数、错误码、失败恢复动作全在 **origin-plotting** skill；本 skill 只管"参考图 → 参数"。
