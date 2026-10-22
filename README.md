@@ -69,6 +69,17 @@ python extract_palette.py --selftest
 
 分层理由是触发面、硬依赖（XPSPeak vs dsh-origin MCP）与复用面都不同，合并会让复刻件被绑死在单一领域；分工条款记录见 <https://github.com/bansheng2000/dsh-xps-peakfit/blob/main/docs/v2.4-figure-routing.md>。
 
+## 触发边界（什么时候**不**该用这个 skill）
+
+| 用户说的话 | 走哪 |
+|---|---|
+| 「复刻 / 照着这张画 / 画成这样 / 模仿这张图 / 参考这张排版」+ 给了图 | 本 skill |
+| 给了图但只说「参考一下配色」，没要求整体复刻 | 先问一句，不明确就不套复刻 |
+| 只说「画个图 / 出张图 / 这张数据画什么好」，**没有图** | **不用本 skill** → `origin-plotting`：`origin_plot_plan`（列画像 + 角色建议 + questions）→ `origin_execute_plan`；领域模板用 `origin_plot_template` |
+| 领域 SOP 委派但没参考图 | 不套复刻 → 上游按 `origin-plotting` 建图 |
+
+判据一句话：**有没有"要照着的那张图"**。没有就走数据驱动选图型（`origin_plot_plan`），两套流程不混。
+
 ## 使用
 
 把本仓库目录放进 agent 的技能目录即可（例如 DSH 的 `~/.agents/skills/dsh-origin-replica/`）。
