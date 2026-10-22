@@ -8,6 +8,7 @@ whenToUse: 用户提供一张参考图（或描述某张成品图）要求把自
 
 > v2.0：改成「任意类型图」的方法论——新增第 0 步强制量测（`measure_ref.py`，颜色和几何比例都从像素来，禁止目测）、图元→通道映射表、能力表（能/只能逼近/做不到）。v1.x 的单图经验收敛进硬坑清单。
 > v2.1：加 `figure_metrics.py`（参考图 ↔ 成品图量化并排对照，收敛循环靠它而不是肉眼）；新增硬坑 11/12（COM 异常可 `origin_release` 救回但工程会丢、字号/点径的正确通道）。
+> v2.2：借 editaplot 的参考图契约——新增第 1.5 步「样式台账」（每字段三态 applied / retained_default / rejected + 来源优先级 + 允许清单），收尾加「缺读回=失败」；参考图只给文字**角色**，不给文字内容。
 
 目的：把"看着像"变成"逐字段对得上"。入口是量测 + 规格卡，出口是一张差量表为空的图。
 
@@ -47,6 +48,7 @@ python measure_ref.py 参考图.png --box band:330,282,470,300 --box peak:575,19
 1. **颜色必须来自像素**。目测配色是本 skill 最高频的返工原因（实测一次目测把 #DE90BA 估成 #D0618F、把深蓝文字估成黑色）。
 2. **比例必须来自像素**（装饰带高占比、白缝高占比、外框占画幅），别用眼睛对齐。
 3. 量不到的字段在卡里写 `unknown`，动手前一次性问用户，别猜两轮。
+4. **绑哈希**：量测前记参考图 `sha256 + 尺寸 + 字节数` 进规格卡 `refs`（`sha256sum` 一行即可）。对外记录只留 hash，不留私有路径；换图就要重写卡，不许沿用旧卡。
 
 精确取色补充：`extract_palette.py`（量化分桶 + 桶内真实平均）看全局色板；`measure_ref.py` 取局部区域 + 量比例。
 
@@ -75,6 +77,37 @@ python figure_metrics.py 参考图.png 成品图.png   # 并排输出可比的�
 | legend | 位置（tr/tl/br/bl）、字号、有无边框 | 目测 |
 | refs | 参考线 / 阈值线 / 峰位刻线 | 目测 + `layout_info` 坐标 |
 | fonts | 字体族（有无衬线）、轴标题/刻度/标注字号 pt、颜色 | `box` 取文字色 + 目测字形 |
+
+## 第 1.5 步：样式台账（每个字段必须落三态之一，不许含糊）
+
+**来源优先级（高→低）**：① 用户明确给的值 ② 从参考图抽象出的、允许清单内的建议 ③ Origin/模板默认。
+用户的值压过参考图；**用户给的值非法（超范围/不存在）→ 直接报错要正确值，不许静默回退默认**。
+
+参考图只能动**允许清单**（本机实测能精确落地**且能读回**）：
+
+| 允许清单 → 可 `applied` | 通道 |
+|---|---|
+| 系列颜色 hex | `set -pfb/-pff`、`origin_edit_plot(color=)` |
+| 线宽 pt / 线型 / 符号形状 | `origin_edit_plot` |
+| 符号尺寸（只改 size，**不删点**） | `symbol_size` |
+| 填充透明度、渐变起止色 | `-pfm 3` + `-pfb/-pff` |
+| 轴范围 / 刻度类型 / 反向 / 刻度与轴标题字号 | `origin_edit_axis`、`layer.x.label.pt` |
+| 页面尺寸与图层几何 | `origin_edit_page` |
+| 装饰带、白遮罩、文字位置与颜色 | LabTalk 派生列 + `TextN` |
+
+**默认 `retained_default`（参考图改不动，除非用户明确要求且本机实测读回）**：字体族、图例位置/边框、网格、背景、面板结构、图表类型本身。
+做不到的（如字体族 `TextN.font$` 静默 no-op）→ `rejected` 并写原因，别写成"差不多对齐"。
+
+**台账格式（交付时贴给用户或上游）**：
+
+| 字段 | 参考图 | 采用值 | 状态 | 依据 |
+|---|---|---|---|---|
+| 系列色 | #DE90BA | #DE90BA | applied | 像素取色 + 导出回读 |
+| 带高/绘图高 | 14.7% | 14.6% | applied | `figure_metrics.py` 读数 |
+| 字体族 | Arial | Times（Origin 默认） | rejected | `TextN.font$` no-op，只能 GUI 手改 |
+| 图例位置 | br | 默认 | retained_default | 用户未要求，参考图不构成指令 |
+
+**`unverified`（改了但读不回）不算 applied**：交付前必须降级为 rejected，或补一次导出取像素回读。
 
 ## 第 2 步：图元 → Origin 通道（照着查，别自己发明）
 
@@ -127,6 +160,7 @@ python figure_metrics.py 参考图.png 成品图.png   # 并排输出可比的�
 
 ## 第 5 步：收尾（完成判据）
 - `origin_verify_graph(graph, expected_series=卡上系列数, min_font_pt=8)`：`fail` 必修，`warn` 提一句。
+- **缺读回 = 失败**：台账里每个 `applied` 必须有读回（verify 的对象属性读数，或导出后取像素）。只有导出 PNG/PDF 存在不算成功；读不回就降级，不靠"看着像"。
 - 页面尺寸按卡 canvas 定；导出 `width>=1800`；要完整交付用 `origin_export_delivery`。
 - 回复 = 交付文件路径 + 差量表结论（哪几项没对齐、为什么，含能力表里的"只能逼近/做不到"）。
 
@@ -153,5 +187,6 @@ python figure_metrics.py 参考图.png 成品图.png   # 并排输出可比的�
 ## 备注
 - 参数、错误码、失败恢复动作全在 **origin-plotting** skill；本 skill 只管"参考图 → 参数"。
 - 参考图小字/细线读不准：读卡阶段问一次，别猜。
+- 与 **editaplot**（github.com/hang-jin/editaplot）的关系：三态样式台账、允许清单、文字只记角色、缺读回即失败 —— 概念自它借鉴；**不借**它的 template registry / plan 冻结 / 自带 originpro 运行时（我们用 dsh-origin MCP，多一层 runner 是纯负担）。
 - 参考图里的面板字母、水印、页面外杂散对象：数据里没有就别硬造，导出后 `im.crop((x,0,w,h))` 裁掉最快。
 - 一次生成的图先存 `_raw.png`（未裁）再裁出交付版，方便下轮改。

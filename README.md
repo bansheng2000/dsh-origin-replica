@@ -11,7 +11,8 @@
 | # | 步骤 | 产物 |
 |---|---|---|
 | 0 | 像素量测 | `measure_ref.py` 输出外框比例、主色板（桶内真实平均色）、指定区域取色、装饰带占比 |
-| 1 | 写规格卡 | 十三字段卡：canvas / geometry / family / panels / x,y / y2 / series / fill / deco / yerr / legend / refs / fonts |
+| 1 | 写规格卡 | 十三字段卡：canvas / geometry / family / panels / x,y / y2 / series / fill / deco / yerr / legend / refs / fonts；`refs` 记参考图 sha256 + 尺寸 + 字节数 |
+| 1.5 | 样式台账 | 每个字段三态之一：`applied` / `retained_default` / `rejected`；来源优先级= 用户明说 > 参考图允许清单 > 默认 |
 | 2 | 图元 → 通道 | 查映射表：点、线、柱、渐变、白遮罩、装饰带、刻线、文字、图例、面板、对数轴、页面几何 |
 | 3 | 能力表对照 | 能 / 只能逼近 / 做不到三条线分开，别承诺做不到的 |
 | 4 | 收敛循环（最多 3 轮） | `origin_view_graph` 看自己的图 → 只列差项 → 一次批量改 → 再看 |
@@ -49,6 +50,14 @@ python extract_palette.py --selftest
 ```
 
 占比最大的通常是背景 / 网格，挑系列色前先剔除；输出 hex 直接进 `style_overrides.series_colors`。
+
+## 与 editaplot 的关系（v2.2 借鉴了什么）
+
+[editaplot](https://github.com/hang-jin/editaplot) 是同一件事的另一种做法（Codex skill + 自带 originpro 运行时 + 逐图型模板）。
+
+**借鉴**：参考图只是「视觉 brief」，不是数据也不是指令；样式分三态落账（applied / retained_template_default / rejected）；允许清单刻意很小（只放能精确落地**且能读回**的字段）；文字只记**角色**不抄内容；「缺读回 = 失败」，导出存在不等于成功；样式来源优先级（用户明说 > 参考图建议 > 模板默认）。
+
+**不借**：template registry 与 plan 冻结（我们按参考图自由构图，不预设图型）、自带 Python/originpro 运行时（我们用 dsh-origin MCP，多一层 runner 是纯负担）。
 
 ## 与另外两个技能的分工（三层，不合并）
 
