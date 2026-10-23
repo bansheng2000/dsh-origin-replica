@@ -23,7 +23,7 @@ whenToUse: 仅当用户**明确要求复刻/照着某张图**（"复刻"、"照�
 
 判据一句话：**有没有"要照着的那张图"**。有 → 复刻（量测 → 规格卡 → 台账 → 差量收敛）；没有 → 数据驱动选图型（`origin_plot_plan` 的列画像 + questions 就是选型依据），两套流程不混。
 ## 先划红线（前 3 条违反=造假，用户硬要也要先明说）
-1. 数据只能来自用户给的数值/文件；**禁止从参考图像素反推数据点**。像素只用来读"图形语法"（颜色、线型、布局、字号、比例）。
+1. **Origin 画图必须建立在真实数据上，一个点都不许编**。数据只能来自用户给的数值/文件（给出文件路径与列名，交付时写明）；**禁止**：从参考图像素反推数据点、凭空造曲线/背景/基线、用"看起来合理"的数补齐缺失列、把模拟/示意数据当实验结果画。像素只用来读"图形语法"（颜色、线型、布局、字号、比例）。**没有数据就先要数据，不画假图**。
 2. 不抄参考图里的文字、拟合参数、物相/峰标注、Logo、水印；标注内容一律用用户自己的。
 3. 不承诺 1:1；交付话术固定为"布局与风格已对齐，数据为本实验数据"。
 4. 参考图有、本插件没有的能力，如实说做不到，别硬凑一个近似品假装对齐（见能力表）。
@@ -136,7 +136,7 @@ python figure_metrics.py 参考图.png 成品图.png   # 并排输出可比的�
 | 多面板 / 双 Y / 堆叠谱 / XRD | `origin_plot_template`：multi_panel / dual_y / stacked_spectra（`gradient=true`）/ xrd_pattern / forest | 面板数受数据份数限制 |
 | 对数轴 / 反向轴 / 刻度数 | `origin_edit_axis(scale={2:log10,3:ln}, from_value, to_value, props={"rescale":0})` + `layer.x.majorTicks=9` | 改轴会挪文本，改完重排注释 |
 | 页面尺寸 / 图层几何 | `origin_edit_page(page_size_cm={"width":8.9,"height":6.5}, layer_geometry_pct={...})` | 用第 0 步量到的 % |
-| 导出 | `origin_export(fmt="png", width>=1800)`；整包 `origin_export_delivery` | 导出后裁掉页面外的杂散对象比在 Origin 里找快 |
+| 导出 | 三件套：`origin_export(fmt="png", width>=1800)` + `origin_export(fmt="pdf")` + `origin_save_project(.opju)`；整包 `origin_export_delivery` | 导出后裁掉页面外的杂散对象比在 Origin 里找快 |
 
 ## 第 3 步：能力表（接活前先对照，别承诺做不到的）
 
@@ -172,14 +172,17 @@ python figure_metrics.py 参考图.png 成品图.png   # 并排输出可比的�
 ## 第 5 步：收尾（完成判据）
 - `origin_verify_graph(graph, expected_series=卡上系列数, min_font_pt=8)`：`fail` 必修，`warn` 提一句。
 - **缺读回 = 失败**：台账里每个 `applied` 必须有读回（verify 的对象属性读数，或导出后取像素）。只有导出 PNG/PDF 存在不算成功；读不回就降级，不靠"看着像"。
-- 页面尺寸按卡 canvas 定；导出 `width>=1800`；要完整交付用 `origin_export_delivery`。
+- **交付物固定三种格式，缺一不算交付**：`origin_export(fmt="png", width>=1800)` + `origin_export(fmt="pdf")` + `origin_save_project(<同名>.opju)`（或一步 `origin_export_delivery(fmts="png,pdf,tif", save_opju=true)`，把 tif 当可选附加）。三件同目录、同名、逐件回报字节数。
+- 页面尺寸按卡 canvas 定；PNG 宽度 ≥1800。
 - 回复 = 交付文件路径 + 差量表结论（哪几项没对齐、为什么，含能力表里的"只能逼近/做不到"）。
 
-## 交付前自检（10 条有一条 no 就别交付）
+## 交付前自检（12 条有一条 no 就别交付）
 1. 数据一项都不来自参考图像素？ 2. 系列数 = 卡上？ 3. 每条颜色 = 卡上 hex（像素验过，不是"差不多"）？
 4. 轴标题含单位、范围一致？ 5. 次轴/反向轴/刻度朝内朝外按要求？ 6. 图例位置字号对齐？
 7. 页面尺寸与图层几何 = 卡上？ 8. verify 无 fail？ 9. 填充形态（纯色/渐变/起止色/下边界）与卡一致？
 10. 装饰带高度与白缝比例 = 量测值（不是估的）？
+11. **数据可追溯**：交付里写明数据文件路径 + 用到的列名，逐列说明来源；有没有任何一列是补出来/平滑过/示意数据？
+12. **三格式齐**：同名 PNG（≥1800 宽）+ PDF + OPJU 都存在且非空字节？
 
 ## 硬坑清单（实测，别重踩）
 1. **LabTalk 数据集名 = 列短名**（`Book3_H`），写列名（`Comp1`）静默无效：导出字节和上次一模一样就是没生效的判据。动手前 `origin_inspect_graph` 读真实 dataset 名。
