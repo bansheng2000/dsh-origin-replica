@@ -27,6 +27,7 @@ whenToUse: 仅当用户**明确要求复刻/照着某张图**（"复刻"、"照�
 2. 不抄参考图里的文字、拟合参数、物相/峰标注、Logo、水印；标注内容一律用用户自己的。
 3. 不承诺 1:1；交付话术固定为"布局与风格已对齐，数据为本实验数据"。
 4. 参考图有、本插件没有的能力，如实说做不到，别硬凑一个近似品假装对齐（见能力表）。
+5. **不许为了"像参考图"而平滑/插值/重采样用户数据**（参考图的包络平滑是它的画法，不是改数据的授权）。原始数据保持原样；确需平滑必须单独说明、保留原始列、并在交付话术里写清。
 
 ## 上游委派接口（被领域 SOP 调用时，如 dsh-xps-peakfit）
 
@@ -126,7 +127,7 @@ python figure_metrics.py 参考图.png 成品图.png   # 并排输出可比的�
 | 原始数据点（密集小圆点） | `origin_edit_plot({"symbol_kind":2,"symbol_size":1.5,"color":"#hex"})`；不显示时用 LabTalk `plotxy iy:=[Book]1!2 plot:=201 ogl:=[Graph]1!` 重新追加 | 追加的 plot 永远在最上层；追加后必须 `origin_edit_axis(props={rescale:0})` 复位轴 |
 | 包络线 / 拟合线 | `origin_edit_plot({"line_width_pt":2,"color":"#hex"})` | — |
 | 柱/条/面积 纯色填充 | `set <Book>_<Col> -pfb color(r,g,b);`（边框 `-pbc`） | 数据集名是**列短名** |
-| 柱/条/面积 渐变填充 | `set %C -pfm 3; -pfb color(顶); -pff color(底);`（面积/折线先 `-pfv 0; -pf 1;`） | 顶=起始色、底=终止色；`-pfm` 只试 0/1/2/3 |
+| 柱/条/面积 渐变填充 | `layer -s 1; layer.plot = <第几条>; set %C -pf 1; set %C -pfm 3; set %C -pfb color(顶色); set %C -pff color(底色);` | 顶=起始色、底=终止色；`-pfm` 只试 0/1/2/3；`-pff color(255,255,255)` = 峰顶浓、到底部褪白的参考图效果（2026-10-23 实测）；**填充永远铺到轴底**，`-pf 2` 也一样，偏移/堆叠谱必须配白遮罩截断 |
 | **峰填充止于背景曲线** | 白遮罩法：另起一列 `= 背景列 - 150`，`-pfm 0` + `-pfb color(255,255,255)` + 填到轴底，压住背景线以下的峰填充 | fill-to-next（`-pfv 9`）忽略 `-pfm`，只能纯色；白遮罩视觉等价且能带渐变 |
 | 整幅宽装饰色带（area ratio 条） | 两条常数/派生曲线夹出填充区：底=轴下限常数、顶=`col(背景)-间距`；条色 `-pfb`、线色设成条色 | 与谱之间靠"背景列−间距"自动留白缝；条内文字 y 落在带内 |
 | 峰位刻线 | `origin_add_line(graph, orientation="vertical", at=<峰位>, line_style=0)` | — |
@@ -191,7 +192,8 @@ python figure_metrics.py 参考图.png 成品图.png   # 并排输出可比的�
 8. **渐变/填充是否生效只能像素验**：导出后在峰中心取一条竖列，`uniq` 色数 <20 就是纯色。文字颜色同理用 `box` 取色核对。
 9. **`doc -o` 切工程前先存当前工程**：有未保存修改时切项目，Origin 弹「是否保存」模态框，之后所有 COM 调用 60s 超时（`origin_status` 也超时），只能人工点掉弹窗或重启。正确顺序：`origin_save_project(临时路径)` → `doc -o 目标.opju`。
 10. **别乱动字体属性**：`TextN.font$` / `layer.x.label.font$` 静默 no-op；`TextN.font=<索引>` 会把字变等宽或粗体，且 `layer.x.font` 改不回原样——想保字体就别碰，改坏了重开已存的 opju 恢复。
-11. **COM 报 `<built-in function ApplicationBase_Path> returned a result with an exception set` = 会话中毒**：诱因是 `origin_labtalk` 里跑带 `$()` 的 `type` 命令、或渐变设色与导出挤在同一批调用。救法=先 `origin_release`，下个调用自动重连（`origin_status` 恢复 ok）；**但 release 会丢掉当前工程**（`list_pages` 变空），所以每次改动前先 `origin_save_project`，救回后 `doc -o 该 opju` 重开。release 救不回时再重启 Origin。
+11. **面积/峰渐变实测通道（2026-10-23 验证）**：`layer.plot = N` 选第 N 条曲线后 `set %C -pf 1; set %C -pfm 3; set %C -pfb color(R,G,B); set %C -pff color(255,255,255);`，导出取样=顶部饱和、底部褪白，色带按整个绘图区高度线性插值。填充下边界固定为**轴下限**（`-pf 2` 不改），偏移基线谱会被色带糊到轴底——必须后叠白遮罩（值=背景列−Δ，`-pfm 0` 纯白填到轴底）再画基线与数据。
+12. **COM 报 `<built-in function ApplicationBase_Path> returned a result with an exception set` = 会话中毒**：诱因是 `origin_labtalk` 里跑带 `$()` 的 `type` 命令、或渐变设色与导出挤在同一批调用。救法=先 `origin_release`，下个调用自动重连（`origin_status` 恢复 ok）；**但 release 会丢掉当前工程**（`list_pages` 变空），所以每次改动前先 `origin_save_project`，救回后 `doc -o 该 opju` 重开。release 救不回时再重启 Origin。
 12. **字号/点径只有两条通道，别瞎试**：刻度标签字号=`origin_edit_axis(axis="x", props={label_font_pt:11})`（读回 `x.label.fsize`）；轴标题字号=`layer.x.label.pt`；**`layer.x.pt`/`layer.y.pt` 不是刻度字号（设了静默无效）**；散点= `origin_edit_plot(edits=[{plot:i, symbol_size:..}])`，参照 `symbol_size`≈1.0 @1800 px 宽 ≈ 4~5 px 点径（参考图 0.3% 绘图宽）——1.5 偏粗、0.8 几乎看不见。
 
 ## 备注
